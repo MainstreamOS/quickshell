@@ -43,6 +43,8 @@ HyprlandScreencopyContext::HyprlandScreencopyContext(
     : manager(manager)
     , handle(handle)
     , paintCursors(paintCursors) {
+	this->retryTimer.setSingleShot(true);
+	QObject::connect(&this->retryTimer, &QTimer::timeout, this, [this]() { this->captureFrame(); });
 	QObject::connect(
 	    handle,
 	    &QObject::destroyed,
@@ -57,12 +59,14 @@ HyprlandScreencopyContext::~HyprlandScreencopyContext() {
 
 void HyprlandScreencopyContext::onToplevelDestroyed() {
 	qCWarning(logScreencopy) << "Toplevel destroyed while recording. Stopping" << this;
+	this->retryTimer.stop();
+	this->handle = nullptr;
 	if (this->object()) this->destroy();
 	emit this->stopped();
 }
 
 void HyprlandScreencopyContext::captureFrame() {
-	if (this->object()) return;
+	if (this->object() || !this->handle || this->retryTimer.isActive()) return;
 
 	this->request.reset();
 
@@ -107,9 +111,7 @@ void HyprlandScreencopyContext::hyprland_toplevel_export_frame_v1_buffer_done() 
 	if (!backbuffer || !backbuffer->buffer()) {
 		qCWarning(logScreencopy) << "Backbuffer creation failed for screencopy. Skipping frame.";
 
-		// Try again. This will be spammy if the compositor continuously sends bad frames.
-		this->destroy();
-		this->captureFrame();
+		this->retryFrame();
 		return;
 	}
 
@@ -122,14 +124,26 @@ void HyprlandScreencopyContext::hyprland_toplevel_export_frame_v1_ready(
     uint32_t /*tvNsec*/
 ) {
 	this->destroy();
+	this->failedFrames = 0;
 	this->copiedFirstFrame = true;
 	this->mSwapchain.swapBuffers();
 	emit this->frameCaptured();
 }
 
-void HyprlandScreencopyContext::hyprland_toplevel_export_frame_v1_failed() {
-	qCWarning(logScreencopy) << "Ending recording due to screencopy failure for" << this;
-	emit this->stopped();
+void HyprlandScreencopyContext::hyprland_toplevel_export_frame_v1_failed() { this->retryFrame(); }
+
+void HyprlandScreencopyContext::retryFrame() {
+	// A resize can invalidate the size offered for an in-flight frame. Keep
+	// the last good buffer and request a fresh offer instead of ending the view.
+	if (this->object()) this->destroy();
+	if (++this->failedFrames > 10) {
+		qCWarning(logScreencopy) << "Ending recording after repeated screencopy failures for" << this;
+		emit this->stopped();
+		return;
+	}
+	// Force damage on the replacement, even if the resized window is idle.
+	this->copiedFirstFrame = false;
+	this->retryTimer.start(qMin(this->failedFrames * 50U, 250U));
 }
 
 } // namespace qs::wayland::screencopy::hyprland

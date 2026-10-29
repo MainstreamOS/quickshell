@@ -1,6 +1,7 @@
 #pragma once
 
 #include <qtclasshelpermacros.h>
+#include <qtimer.h>
 #include <qwayland-hyprland-toplevel-export-v1.h>
 
 #include "../../toplevel/wlr_toplevel.hpp"
@@ -39,6 +40,9 @@ private slots:
 	void onToplevelDestroyed();
 
 private:
+	void retryFrame();
+	QTimer retryTimer;
+	uint32_t failedFrames = 0;
 	HyprlandScreencopyManager* manager;
 	buffer::WlBufferRequest request;
 	bool copiedFirstFrame = false;
