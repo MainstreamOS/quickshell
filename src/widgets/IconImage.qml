@@ -1,4 +1,5 @@
 import QtQuick
+import Quickshell
 
 ///! Image component for displaying widget/icon style images.
 /// This is a specialization of @@QtQuick.Image configured for icon-style images,
@@ -61,7 +62,10 @@ Item {
 		anchors.fill: parent
 		fillMode: Image.PreserveAspectFit
 
-		sourceSize.width: root.actualSize
-		sourceSize.height: root.actualSize
+		// In device pixels, whole ones, or scalable images and icons are drawn too small on a
+		// fractionally scaled screen and then stretched.
+		readonly property int devicePixels: Math.ceil(root.actualSize * (root.QsWindow.window?.devicePixelRatio ?? 1))
+		sourceSize.width: image.devicePixels
+		sourceSize.height: image.devicePixels
 	}
 }
