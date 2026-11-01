@@ -35,10 +35,17 @@ QS_LOGGING_CATEGORY(logScene, "scene");
 
 static QHash<const QQmlEngine*, EngineGeneration*> g_generations; // NOLINT
 
+namespace {
+quint64 nextGenerationId() {
+	static quint64 id = 0;
+	return ++id;
+}
+} // namespace
+
 EngineGeneration::EngineGeneration(const QDir& rootPath, QmlScanner scanner)
     : rootPath(rootPath)
     , scanner(std::move(scanner))
-    , urlInterceptor(this->rootPath)
+    , urlInterceptor(this->rootPath, nextGenerationId())
     , interceptNetFactory(this->rootPath, this->scanner.fileIntercepts)
     , engine(new QQmlEngine()) {
 	g_generations.insert(this->engine, this);

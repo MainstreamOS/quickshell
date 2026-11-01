@@ -48,6 +48,14 @@ QUrl QsUrlInterceptor::intercept(
 			return QUrl("qrc:/qs-blackhole");
 		}
 
+		// Qt keeps the types it makes for a QML file by URL across engines, for as long as any
+		// engine still uses them, and the generation being replaced still does. Without a URL
+		// of its own, a file that gained an inline component finds the old type, which has none.
+		if (type == QQmlAbstractUrlInterceptor::DataType::QmlFile && path.endsWith(".qml")) {
+			url.setQuery(QString::number(this->generationId));
+			return url;
+		}
+
 		// Some types such as Image take into account where they are loading from, and force
 		// asynchronous loading over a network. qs: is considered to be over a network.
 		// In those cases we want to return a file:// url so asynchronous loading is not forced.

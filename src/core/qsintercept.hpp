@@ -8,6 +8,7 @@
 #include <qnetworkrequest.h>
 #include <qqmlabstracturlinterceptor.h>
 #include <qqmlnetworkaccessmanagerfactory.h>
+#include <qtypes.h>
 #include <qurl.h>
 
 #include "logcat.hpp"
@@ -16,12 +17,15 @@ QS_DECLARE_LOGGING_CATEGORY(logQsIntercept);
 
 class QsUrlInterceptor: public QQmlAbstractUrlInterceptor {
 public:
-	explicit QsUrlInterceptor(const QDir& configRoot): configRoot(configRoot) {}
+	explicit QsUrlInterceptor(const QDir& configRoot, quint64 generationId)
+	    : configRoot(configRoot)
+	    , generationId(generationId) {}
 
 	QUrl intercept(const QUrl& originalUrl, QQmlAbstractUrlInterceptor::DataType type) override;
 
 private:
 	QDir configRoot;
+	quint64 generationId;
 };
 
 class QsInterceptDataReply: public QNetworkReply {
