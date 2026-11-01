@@ -291,10 +291,8 @@ void Process::onErrorOccurred(QProcess::ProcessError error) {
 	if (error == QProcess::FailedToStart) { // other cases should be covered by other events
 		qWarning() << "Process failed to start, likely because the binary could not be found. Command:"
 		           << this->mCommand;
-		QObject::disconnect(this->process, nullptr, this, nullptr);
-		this->process->deleteLater();
-		this->process = nullptr;
-		emit this->runningChanged();
+		// Ends like any other run, with the code a shell gives for a command it can't run.
+		this->onFinished(127, QProcess::NormalExit);
 	}
 }
 

@@ -218,6 +218,7 @@ public:
 
 signals:
 	void started();
+	/// Emitted when the process ends. A command that can't start ends the same way, with code 127.
 	void exited(qint32 exitCode, QProcess::ExitStatus exitStatus);
 
 	void runningChanged();
