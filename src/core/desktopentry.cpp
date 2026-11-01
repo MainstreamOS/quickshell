@@ -511,26 +511,30 @@ void DesktopEntryManager::onScanCompleted(const QList<ParsedDesktopEntryData>& s
 		}
 	});
 
+	// Results run from the lowest priority directory to the highest, so an id shadowed by a
+	// user's own copy appears more than once. Settle which one takes effect before touching any
+	// live entry: updating an entry to a shadowed copy first, then replacing it with a new
+	// object for the copy that wins, flips everything bound to it on every rescan.
+	auto effectiveIndex = QHash<QString, qsizetype>();
+	for (qsizetype i = 0; i != scanResults.length(); i++) {
+		const auto& data = scanResults.at(i);
+		if (data.hidden) effectiveIndex.insert(data.id, -1);
+		else if (!data.name.isEmpty()) effectiveIndex.insert(data.id, i);
+	}
+
 	auto oldEntries = this->desktopEntries;
 	auto newEntries = QHash<QString, DesktopEntry*>();
 	auto newLowercaseEntries = QHash<QString, DesktopEntry*>();
 
-	for (const auto& data: scanResults) {
-		auto lowerId = data.id.toLower();
+	for (qsizetype i = 0; i != scanResults.length(); i++) {
+		const auto& data = scanResults.at(i);
 
-		if (data.hidden) {
-			if (auto* victim = newEntries.take(data.id)) victim->deleteLater();
-			newLowercaseEntries.remove(lowerId);
-
-			if (auto it = oldEntries.find(data.id); it != oldEntries.end()) {
-				it.value()->deleteLater();
-				oldEntries.erase(it);
-			}
-
-			qCDebug(logDesktopEntry) << "Masking hidden desktop entry" << data.id;
+		if (effectiveIndex.value(data.id, -1) != i) {
+			if (data.hidden) qCDebug(logDesktopEntry) << "Masking hidden desktop entry" << data.id;
 			continue;
 		}
 
+		auto lowerId = data.id.toLower();
 		DesktopEntry* dentry = nullptr;
 
 		if (auto it = oldEntries.find(data.id); it != oldEntries.end()) {
@@ -551,14 +555,6 @@ void DesktopEntryManager::onScanCompleted(const QList<ParsedDesktopEntryData>& s
 		}
 
 		qCDebug(logDesktopEntry) << "Found desktop entry" << data.id;
-
-		auto conflictingId = newEntries.contains(data.id);
-
-		if (conflictingId) {
-			qCDebug(logDesktopEntry) << "Replacing old entry for" << data.id;
-			if (auto* victim = newEntries.take(data.id)) victim->deleteLater();
-			newLowercaseEntries.remove(lowerId);
-		}
 
 		newEntries.insert(data.id, dentry);
 
