@@ -62,22 +62,41 @@ HyprlandScreencopyContext::HyprlandScreencopyContext(
 	);
 }
 
-HyprlandScreencopyContext::~HyprlandScreencopyContext() {
-	if (this->object()) this->destroy();
+HyprlandScreencopyContext::~HyprlandScreencopyContext() { this->releaseFrame(); }
+
+// A view can drop this context while the closed event is still being handled, before
+// onToplevelDestroyed runs, so both paths go through here.
+void HyprlandScreencopyContext::releaseFrame() {
+	if (!this->frame()) return;
+
+	if (this->frameAnswered || (this->handle && this->handle->object())) {
+		this->destroy();
+	} else {
+		// Dropped on this side only: no request names an object the compositor never made.
+		wl_proxy_destroy(reinterpret_cast<wl_proxy*>(this->object())); // NOLINT
+		this->frameAbandoned = true;
+	}
+}
+
+struct ::hyprland_toplevel_export_frame_v1* HyprlandScreencopyContext::frame() {
+	return this->frameAbandoned ? nullptr : this->object();
 }
 
 void HyprlandScreencopyContext::onToplevelDestroyed() {
 	qCDebug(logScreencopy) << "Toplevel closed while recording. Stopping" << this;
 	this->retryTimer.stop();
+	this->releaseFrame();
 	this->handle = nullptr;
-	if (this->object()) this->destroy();
 	emit this->stopped();
 }
 
 void HyprlandScreencopyContext::captureFrame() {
-	if (this->object() || !this->handle || !this->handle->object() || this->retryTimer.isActive()) return;
+	if (this->frame() || this->frameAbandoned || !this->handle || !this->handle->object()
+	    || this->retryTimer.isActive())
+		return;
 
 	this->request.reset();
+	this->frameAnswered = false;
 
 	this->init(this->manager->capture_toplevel_with_wlr_toplevel_handle(
 	    this->paintCursors ? 1 : 0,
@@ -91,6 +110,7 @@ void HyprlandScreencopyContext::hyprland_toplevel_export_frame_v1_buffer(
     uint32_t height,
     uint32_t /*stride*/
 ) {
+	this->frameAnswered = true;
 	// While different sizes can technically be requested, that would be insane.
 	this->request.width = width;
 	this->request.height = height;
@@ -102,6 +122,7 @@ void HyprlandScreencopyContext::hyprland_toplevel_export_frame_v1_linux_dmabuf(
     uint32_t width,
     uint32_t height
 ) {
+	this->frameAnswered = true;
 	// While different sizes can technically be requested, that would be insane.
 	this->request.width = width;
 	this->request.height = height;
@@ -109,6 +130,7 @@ void HyprlandScreencopyContext::hyprland_toplevel_export_frame_v1_linux_dmabuf(
 }
 
 void HyprlandScreencopyContext::hyprland_toplevel_export_frame_v1_flags(uint32_t flags) {
+	this->frameAnswered = true;
 	if (flags & HYPRLAND_TOPLEVEL_EXPORT_FRAME_V1_FLAGS_Y_INVERT) {
 		this->mSwapchain.backbuffer()->transform = buffer::WlBufferTransform::Flipped180;
 	}
@@ -139,12 +161,15 @@ void HyprlandScreencopyContext::hyprland_toplevel_export_frame_v1_ready(
 	emit this->frameCaptured();
 }
 
-void HyprlandScreencopyContext::hyprland_toplevel_export_frame_v1_failed() { this->retryFrame(); }
+void HyprlandScreencopyContext::hyprland_toplevel_export_frame_v1_failed() {
+	this->frameAnswered = true;
+	this->retryFrame();
+}
 
 void HyprlandScreencopyContext::retryFrame() {
 	// A resize can invalidate the size offered for an in-flight frame. Keep
 	// the last good buffer and request a fresh offer instead of ending the view.
-	if (this->object()) this->destroy();
+	if (this->frame()) this->destroy();
 	if (++this->failedFrames > 10) {
 		qCWarning(logScreencopy) << "Ending recording after repeated screencopy failures for" << this;
 		emit this->stopped();

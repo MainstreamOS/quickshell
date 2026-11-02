@@ -40,12 +40,19 @@ private slots:
 	void onToplevelDestroyed();
 
 private:
+	// The frame in flight, or null. An abandoned frame is never touched again.
+	[[nodiscard]] struct ::hyprland_toplevel_export_frame_v1* frame();
+	void releaseFrame();
 	void retryFrame();
 	QTimer retryTimer;
 	uint32_t failedFrames = 0;
 	HyprlandScreencopyManager* manager;
 	buffer::WlBufferRequest request;
 	bool copiedFirstFrame = false;
+	// Hyprland answers a frame at once when it creates one, so a frame still unanswered when
+	// its window's closed event arrives was never created, and destroying it is fatal.
+	bool frameAnswered = false;
+	bool frameAbandoned = false;
 
 	toplevel::wlr::ToplevelHandle* handle;
 	bool paintCursors;
