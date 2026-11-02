@@ -51,6 +51,15 @@ HyprlandScreencopyContext::HyprlandScreencopyContext(
 	    this,
 	    &HyprlandScreencopyContext::onToplevelDestroyed
 	);
+	// A closed handle has already been destroyed on the wire, long before the object goes away.
+	// A frame requested with it passes null for a non-nullable argument, which is fatal to the
+	// whole connection.
+	QObject::connect(
+	    handle,
+	    &toplevel::wlr::ToplevelHandle::closed,
+	    this,
+	    &HyprlandScreencopyContext::onToplevelDestroyed
+	);
 }
 
 HyprlandScreencopyContext::~HyprlandScreencopyContext() {
@@ -58,7 +67,7 @@ HyprlandScreencopyContext::~HyprlandScreencopyContext() {
 }
 
 void HyprlandScreencopyContext::onToplevelDestroyed() {
-	qCWarning(logScreencopy) << "Toplevel destroyed while recording. Stopping" << this;
+	qCDebug(logScreencopy) << "Toplevel closed while recording. Stopping" << this;
 	this->retryTimer.stop();
 	this->handle = nullptr;
 	if (this->object()) this->destroy();
@@ -66,7 +75,7 @@ void HyprlandScreencopyContext::onToplevelDestroyed() {
 }
 
 void HyprlandScreencopyContext::captureFrame() {
-	if (this->object() || !this->handle || this->retryTimer.isActive()) return;
+	if (this->object() || !this->handle || !this->handle->object() || this->retryTimer.isActive()) return;
 
 	this->request.reset();
 
