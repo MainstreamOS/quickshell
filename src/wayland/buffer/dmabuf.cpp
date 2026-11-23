@@ -176,6 +176,7 @@ void LinuxDmabufFeedback::zwp_linux_dmabuf_feedback_v1_format_table(int32_t fd, 
 	this->formatTableSize = size;
 
 	this->formatTable = mmap(nullptr, size, PROT_READ, MAP_PRIVATE, fd, 0);
+	close(fd);
 
 	if (this->formatTable == MAP_FAILED) {
 		this->formatTable = nullptr;
