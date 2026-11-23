@@ -316,12 +316,19 @@ int launch(const LaunchArgs& args, char** argv) {
 	qs::ipc::IpcServer::start();
 	QsPaths::instance()->createLock();
 
-	auto root = RootWrapper(args.configPath, shellId);
-	QGuiApplication::setQuitOnLastWindowClosed(false);
+	auto code = 0;
 
-	exitDaemon(0);
+	// A generation still alive at exit destroys objects that use the display
+	// connection, so the wrapper has to go before the application does.
+	{
+		auto root = RootWrapper(args.configPath, shellId);
+		QGuiApplication::setQuitOnLastWindowClosed(false);
 
-	auto code = QGuiApplication::exec();
+		exitDaemon(0);
+
+		code = QGuiApplication::exec();
+	}
+
 	delete app;
 	return code;
 }
